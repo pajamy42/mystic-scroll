@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mystic Feed</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#07060d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{color-scheme:dark;--bg:#07060d;--ink:#b9b4d6;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,sans-serif}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:2;display:flex;justify-content:center;padding:10px;background:rgba(7,6,13,.8);backdrop-filter:blur(10px)}
+#feed{max-width:520px;margin:0 auto}
+article{padding:10px 0 4px}
+.top{display:flex;align-items:center;gap:10px;padding:0 14px 10px;opacity:.75}
+.av{display:block;width:30px;height:30px;border-radius:50%;border:1px solid rgba(185,180,214,.25);overflow:hidden}
+.img canvas{display:block;width:100%;aspect-ratio:4/5;border-radius:18px}
+.act{display:flex;gap:6px;padding:4px 8px}
+.act button{background:none;border:0;color:inherit;opacity:.4;display:flex;align-items:center;gap:6px;padding:8px;cursor:pointer;transition:opacity .4s,filter .4s}
+.act button.on{opacity:1;filter:drop-shadow(0 0 6px currentColor)}
+#fs{position:fixed;inset:0;z-index:10;background:#000;opacity:0;pointer-events:none;transition:opacity .35s}
+#fs.on{opacity:1;pointer-events:auto}
+#fs canvas{display:block;width:100%;height:100%}
+</style></head><body>
+<div id="fs"><canvas></canvas></div>
+<header><span id="mark"></span></header>
+<main id="feed"></main>
+<div id="end" style="height:1px"></div>
+<script>
+const TAU=Math.PI*2,RM=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function rng(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const HM=[[0,25,55],[0,150,210],[0,120,240],[0,180,215],[0,40,200]];
+function pal(n,r){const b=(n*11+200+r()*30)%360,h=HM[r()*HM.length|0].map(d=>(b+d)%360);return(i,l,a)=>`hsla(${h[i%3]},80%,${l}%,${a})`}
+function mkSigil(r){const p=[],k=3+(r()*3|0);for(let i=0;i<k;i++)p.push([(r()*3|0)-1,(r()*3|0)-1]);return{p,d:p.map(()=>r()<.5),o:r()<.5}}
+function drawSigil(x,g,cx,cy,s,col,lw){
+x.lineCap=x.lineJoin='round';x.strokeStyle=x.fillStyle=col;
+x.beginPath();g.p.forEach((q,i)=>x[i?'lineTo':'moveTo'](cx+q[0]*s,cy+q[1]*s));
+x.globalAlpha=.2;x.lineWidth=lw*4;x.stroke();x.globalAlpha=1;x.lineWidth=lw;x.stroke();
+g.p.forEach((q,i)=>{if(g.d[i]){x.beginPath();x.arc(cx+q[0]*s,cy+q[1]*s,lw*1.3,0,TAU);x.fill()}});
+if(g.o){x.beginPath();x.arc(cx,cy,s*1.6,0,TAU);x.lineWidth=lw*.6;x.stroke()}}
+function gl(x,P,i,w,a,l){x.strokeStyle=P(i,55,a*.22);x.lineWidth=w*4;x.stroke();x.strokeStyle=P(i,l||80,a);x.lineWidth=w;x.stroke()}
+
+const aurora=(r,P,B)=>{const b=Array.from({length:3+(r()*3|0)},()=>({y:(r()-.5)*2.2,a:.1+r()*.3,f:1+r()*2.5,p:r()*TAU,s:.2+r()*.3,w:.1+r()*.2,i:r()*3|0}));
+return(x,t)=>{for(const q of b){x.beginPath();for(let k=0;k<=28;k++){const u=-1.1+k/28*2.2,y=q.y+q.a*Math.sin(u*q.f*2+q.p+t*q.s)+.08*Math.sin(u*5-t*q.s*1.7);k?x.lineTo(u,y):x.moveTo(u,y)}
+x.lineCap='round';for(const[m,al]of[[1,.05],[.5,.08],[.2,.12]]){x.lineWidth=q.w*m;x.strokeStyle=P(q.i,60,al*B);x.stroke()}}}};
+
+const beams=(r,P,B)=>{const ox=(r()-.5)*1.4,oy=-1.4,b=Array.from({length:5+(r()*4|0)},()=>({a:Math.PI/2+(r()-.5)*1.1,l:1.8+r(),w:.01+r()*.05,ph:r()*TAU,s:.1+r()*.2,i:r()*3|0}));
+return(x,t)=>{x.lineCap='round';for(const q of b){const a=q.a+.06*Math.sin(t*q.s+q.ph);x.beginPath();x.moveTo(ox,oy);x.lineTo(ox+Math.cos(a)*q.l,oy+Math.sin(a)*q.l);x.lineWidth=q.w*3;x.strokeStyle=P(q.i,60,.05*B);x.stroke();x.lineWidth=q.w*.6;x.strokeStyle=P(q.i,80,.14*B);x.stroke()}}};
+
+const web=(r,P,B)=>{const n=16+(r()*16|0),p=Array.from({length:n},()=>{const a=r()*TAU,d=Math.sqrt(r())*.95;return{x:Math.cos(a)*d,y:Math.sin(a)*d*1.2,ph:r()*TAU,s:.2+r()*.4,i:r()*3|0}});
+return(x,t)=>{const q=p.map(o=>[o.x+.05*Math.sin(t*o.s+o.ph),o.y+.05*Math.cos(t*o.s*1.3+o.ph)]);
+for(let a=0;a<n;a++)for(let b=a+1;b<n;b++){const d=Math.hypot(q[a][0]-q[b][0],q[a][1]-q[b][1]);if(d<.4){x.beginPath();x.moveTo(q[a][0],q[a][1]);x.lineTo(q[b][0],q[b][1]);x.strokeStyle=P(p[a].i,75,(1-d/.4)*.6*B);x.lineWidth=.0035;x.stroke()}}
+p.forEach((o,a)=>{x.beginPath();x.arc(q[a][0],q[a][1],.022,0,TAU);x.fillStyle=P(o.i,60,.18*B);x.fill();x.beginPath();x.arc(q[a][0],q[a][1],.008,0,TAU);x.fillStyle=P(o.i,90,.95*B);x.fill()})}};
+
+const circles=(r,P,B)=>{const R=[];let rad=.14+r()*.1;for(let i=0,k=3+(r()*3|0);i<k;i++){R.push({r:rad,ty:r()*3|0,n:12+(r()*5|0)*6,s:(r()-.5)*.5,i:r()*3|0,po:3+(r()*6|0)});rad+=.1+r()*.16}
+const sg=mkSigil(r),cx=(r()-.5)*.3,cy=(r()-.5)*.3;
+return(x,t)=>{x.save();x.translate(cx,cy);R.forEach(q=>{x.save();x.rotate(t*q.s);x.beginPath();
+if(q.ty==0){for(let a=0;a<q.n;a++){const th=a/q.n*TAU;x.moveTo(Math.cos(th)*q.r,Math.sin(th)*q.r);x.lineTo(Math.cos(th)*(q.r+.035),Math.sin(th)*(q.r+.035))}}
+else if(q.ty==1){for(let a=0;a<=q.po;a++){const th=a/q.po*TAU;x[a?'lineTo':'moveTo'](Math.cos(th)*q.r,Math.sin(th)*q.r)}}
+else x.arc(0,0,q.r,0,TAU);
+gl(x,P,q.i,.004,.8*B);x.beginPath();x.arc(0,0,q.r,0,TAU);gl(x,P,q.i,.0025,.5*B);x.restore()});
+x.rotate(t*.1);drawSigil(x,sg,0,0,.07,P(0,85,.9*B),.006);x.restore()}};
+
+const sigils=(r,P,B)=>{const n=5+(r()*5|0),R=.45+r()*.3,g=Array.from({length:n},()=>mkSigil(r)),c=mkSigil(r),i=r()*3|0;
+return(x,t)=>{x.save();x.rotate(t*.06);g.forEach((s,k)=>{const th=k/n*TAU;x.save();x.translate(Math.cos(th)*R,Math.sin(th)*R);x.rotate(th+Math.PI/2);drawSigil(x,s,0,0,.055,P(i+k,80,.85*B),.006);x.restore()});x.restore();drawSigil(x,c,0,0,.13,P(i,88,.9*B),.008)}};
+
+const orbs=(r,P,B)=>{const o=Array.from({length:3+(r()*3|0)},()=>({a:.3+r()*.6,b:.1+r()*.4,t:r()*TAU,ph:r()*TAU,s:(.15+r()*.3)*(r()<.5?-1:1),i:r()*3|0,m:1+(r()*2|0)}));
+return(x,t)=>{o.forEach(q=>{x.save();x.rotate(q.t);x.beginPath();x.ellipse(0,0,q.a,q.b,0,0,TAU);x.strokeStyle=P(q.i,70,.35*B);x.lineWidth=.003;x.stroke();
+for(let k=0;k<q.m;k++){const th=q.ph+t*q.s+k*TAU/q.m,px=Math.cos(th)*q.a,py=Math.sin(th)*q.b;x.beginPath();x.arc(px,py,.04,0,TAU);x.fillStyle=P(q.i,60,.2*B);x.fill();x.beginPath();x.arc(px,py,.014,0,TAU);x.fillStyle=P(q.i,92,.95*B);x.fill()}x.restore()})}};
+
+const G=[[aurora,0],[beams,0],[web,1],[circles,2],[orbs,2],[sigils,3]];
+
+function makePost(n,fr){
+const r=rng(n*7919+13),rare=fr||r()<.1,P=pal(n,r),B=rare?1.5:1,sp=(rare?1.5:.7+r()*.5)*(RM?.3:1);
+const pool=[...G];for(let i=pool.length-1;i>0;i--){const j=r()*(i+1)|0;[pool[i],pool[j]]=[pool[j],pool[i]]}
+const ls=pool.slice(0,rare?5:2+(r()*2|0)).sort((a,b)=>a[1]-b[1]).map(g=>g[0](r,P,B));
+return{ls,sp,off:r()*100,c0:P(0,13,1),c1:P(1,3,1),rare}}
+
+function draw(p,t,x=p.x,c=p.c){const s=Math.max(c.width/2,c.height/2.5);x.setTransform(s,0,0,s,c.width/2,c.height/2);
+x.globalCompositeOperation='source-over';const g=x.createRadialGradient(0,0,0,0,0,1.4);g.addColorStop(0,p.c0);g.addColorStop(1,p.c1);x.fillStyle=g;x.fillRect(-1,-1.25,2,2.5);
+x.globalCompositeOperation='lighter';const tt=t*p.sp+p.off;p.ls.forEach(f=>{x.save();f(x,tt);x.restore()})}
+
+function glyph(seed,w,h,n,hue){const c=document.createElement('canvas'),d=2,x=c.getContext('2d'),r=rng(seed);c.width=w*d;c.height=h*d;c.style.cssText=`width:${w}px;height:${h}px`;x.scale(d,d);
+for(let i=0;i<n;i++)drawSigil(x,mkSigil(r),w/n*(i+.5),h/2,h*.24,`hsla(${hue},70%,78%,.8)`,1.1);return c}
+
+const IC=['<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/>','<path d="M12 3l9 16H3z"/><path d="M12 9v5"/>','<path d="M4 12a8 8 0 0 1 16 0"/><path d="M8 12a4 4 0 0 1 8 0"/><circle cx="12" cy="17" r="1.5" fill="currentColor"/>'];
+const feed=document.getElementById('feed'),vis=new Set,io=new IntersectionObserver(es=>es.forEach(e=>e.isIntersecting?vis.add(e.target.__p):vis.delete(e.target.__p)),{rootMargin:'80px'});
+let N=0;
+const S0=Math.floor(Math.random()*1e6);
+function add(){const i=N++,n=S0+i,p=makePost(n,i==3),hue=(n*11+200)%360,a=document.createElement('article');
+a.innerHTML='<div class="top"><span class="av"></span><span class="nm"></span></div><div class="img"></div><div class="act"></div>';
+a.querySelector('.av').append(glyph(n*31+1,30,30,1,hue));a.querySelector('.nm').append(glyph(n*31+2,84,14,3,hue));
+const c=document.createElement('canvas'),w=Math.min(innerWidth,520),d=Math.min(devicePixelRatio||1,1.5);c.width=Math.round(w*d);c.height=Math.round(w*1.25*d);
+p.c=c;p.x=c.getContext('2d');c.__p=p;c.onclick=()=>openFs(p);a.querySelector('.img').append(c);
+const act=a.querySelector('.act');
+IC.forEach((s,i)=>{const b=document.createElement('button');b.setAttribute('aria-label','rune');b.innerHTML=`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">${s}</svg>`;
+b.append(glyph(n*31+5+i,40,14,2+(n+i)%2,hue));b.onclick=()=>b.classList.toggle('on');act.append(b)});
+feed.append(a);draw(p,0);io.observe(c)}
+const fs=document.getElementById('fs'),fc=fs.firstElementChild,fx=fc.getContext('2d');let fsP=null;
+function fit(){const d=Math.min(devicePixelRatio||1,1.5);fc.width=Math.round(innerWidth*d);fc.height=Math.round(innerHeight*d)}
+function openFs(p){fit();fsP=p;fs.classList.add('on');try{fs.requestFullscreen&&fs.requestFullscreen().catch(()=>{})}catch(e){}}
+function closeFs(){if(!fsP)return;fs.classList.remove('on');try{document.fullscreenElement&&document.exitFullscreen()}catch(e){}setTimeout(()=>{if(!fs.classList.contains('on'))fsP=null},380)}
+fs.onclick=closeFs;addEventListener('keydown',e=>{if(e.key=='Escape')closeFs()});
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement)closeFs()});
+addEventListener('resize',()=>{if(fsP)fit()});
+let last=0;(function loop(ts){requestAnimationFrame(loop);if(ts-last<33)return;last=ts;if(fsP)draw(fsP,ts/1000,fx,fc);else vis.forEach(p=>draw(p,ts/1000))})(0);
+document.getElementById('mark').append(glyph(777,22,22,1,260));
+for(let i=0;i<5;i++)add();
+const end=document.getElementById('end'),io2=new IntersectionObserver(e=>{if(e[0].isIntersecting){for(let i=0;i<4;i++)add();io2.unobserve(end);io2.observe(end)}},{rootMargin:'1400px'});io2.observe(end);
+if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+</script></body></html>
